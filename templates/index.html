@@ -1,48 +1,1761 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Knowledge & Tasks Platform</title>
-<style>
-:root{--bg:#f6f7fb;--card:#fff;--tx:#1b1f2a;--mu:#667;--ac:#4f46e5;--bd:#e3e6ef;--rd:#d93025}
-@media(prefers-color-scheme:dark){:root{--bg:#12141b;--card:#1b1e28;--tx:#e8eaf2;--mu:#99a;--bd:#2d3140}}
-*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
-header{background:var(--ac);color:#fff;padding:12px 20px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}header h1{font-size:17px;margin:0 16px 0 0}
-header button{background:#fff2;color:#fff;border:0;padding:7px 12px;border-radius:6px;cursor:pointer}header button.on{background:#fff;color:var(--ac)}
-main{max-width:1000px;margin:20px auto;padding:0 16px}.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:12px}
-input,textarea,select{width:100%;padding:8px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--tx);font:inherit;margin:4px 0}
-button.b{background:var(--ac);color:#fff;border:0;padding:8px 14px;border-radius:6px;cursor:pointer;margin:4px 4px 4px 0}button.g{background:none;color:var(--ac);border:1px solid var(--ac)}
-table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:top}td input,td select{margin:0}
-.od{color:var(--rd);font-weight:600}.tag{background:var(--bd);border-radius:10px;padding:2px 8px;font-size:12px}.mu{color:var(--mu);font-size:13px}.row{display:flex;gap:10px}.row>*{flex:1}
-#toast{position:fixed;bottom:16px;right:16px;background:#222;color:#fff;padding:10px 14px;border-radius:8px;display:none;max-width:320px}.ai{background:#e8e6ff;color:#4f46e5;border-radius:10px;padding:2px 8px;font-size:12px}
-</style></head><body>
-<header><h1>📚 Knowledge & Tasks</h1><button data-v="meetings">Meetings</button><button data-v="items">All Action Items</button><button data-v="catchup">Catch-up</button><button data-v="kb">Knowledge Base</button><button data-v="nudges">Follow-up Autopilot ⭐</button></header>
-<main id="m"></main><div id="toast"></div>
-<script>
-const $=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',4000)}
-async function api(p,m='GET',b){try{const r=await fetch('/api'+p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});const j=await r.json();if(!r.ok){toast(j.error+(j.request_id?' (ref '+j.request_id+')':''));return null}return j}catch(e){toast('Network error');return null}}
-const busy=(b,t)=>{b.disabled=true;b.dataset.o=b.textContent;b.textContent=t||'Working…'},free=b=>{b.disabled=false;b.textContent=b.dataset.o};
-document.querySelectorAll('header button').forEach(b=>b.onclick=()=>show(b.dataset.v));
-function show(v,id){document.querySelectorAll('header button').forEach(b=>b.classList.toggle('on',b.dataset.v==v));({meetings:meetings,items:allItems,catchup:catchup,kb:kb,nudges:nudges,detail:()=>detail(id)})[v]()}
-async function meetings(){const ms=await api('/meetings')||[];$('#m').innerHTML=`<div class=card><b>New meeting / work transfer</b><div class=row><input id=t placeholder="Title *"><select id=k><option>meeting<option>handover</select></div><div class=row><input id=p placeholder="Participants (comma separated)"><input id=d type=date></div><textarea id=a placeholder="Agenda"></textarea><button class=b onclick="mk()">Create</button></div>`+ms.map(m=>`<div class=card><a href="#" onclick="show('detail',${m.id});return false"><b>${E(m.title)}</b></a> <span class=tag>${m.kind}</span> <span class=tag>${m.status}</span> <span class=mu>${m.meeting_date||''} · ${m.open_items} open items</span></div>`).join('')}
-async function mk(){const r=await api('/meetings','POST',{title:$('#t').value,kind:$('#k').value,participants:$('#p').value,meeting_date:$('#d').value,agenda:$('#a').value});if(r)show('detail',r.id)}
-async function detail(id){const m=await api('/meetings/'+id);if(!m)return;const ai=x=>x?'<span class=ai>AI</span>':'';
-$('#m').innerHTML=`<div class=card><h3>${E(m.title)} <span class=tag>${m.kind}</span></h3><div class=mu>Participants: ${E(m.participants.join(', '))||'-'} ${m.prev_id?` · follows <a href="#" onclick="show('detail',${m.prev_id});return false">#${m.prev_id}</a>`:''}</div>
-<label>Status <select id=st onchange="setSt(${id},this.value)">${['planned','held','closed'].map(s=>`<option ${s==m.status?'selected':''}>${s}`).join('')}</select></label><pre style="white-space:pre-wrap">${E(m.agenda)}</pre></div>
-<div class=card><b>Raw notes / transcript / chat / email</b><textarea id=raw rows=6 placeholder="Paste unstructured info. Tip: AI structures it into summary, decisions, action items.">${E(m.notes)}</textarea><button class=b id=rb onclick="rc(${id},this)">✨ Generate AI recap</button></div>
-<div class=card><b>Summary</b><p>${E(m.summary)||'<span class=mu>No recap yet</span>'}</p><b>Decisions</b><ul>${m.decisions.map(d=>`<li>${E(d)}`).join('')||'<li class=mu>None'}</ul></div>
-<div class=card><b>Action items</b><table><tr><th>Item<th>Owner<th>Due<th>Status<th>Outcome</tr>${m.items.map(i=>`<tr><td><span title="${E(i.history.map(h=>h.ts+' '+h.event).join('\n'))}">${E(i.title)}</span><br><span class=mu>hover for history</span><td><input value="${E(i.owner)}" onchange="up(${i.id},{owner:this.value},${id})"><td><input type=date value="${i.due||''}" class="${i.overdue?'od':''}" onchange="up(${i.id},{due:this.value},${id})"><td><select onchange="st(${i.id},this.value,${id})">${['open','in_progress','done','dropped'].map(s=>`<option ${s==i.status?'selected':''}>${s}`).join('')}</select><td>${E(i.outcome)}`).join('')}</table>
-<div class=row><input id=ni placeholder="New item"><input id=no placeholder="Owner"><input id=nd type=date><button class=b onclick="ai_(${id})">Add</button></div></div>
-<div class=card><button class=b onclick="cf(${id})">⏭ Carry open items to next meeting</button><button class="b g" onclick="lk(${id},this)">🔗 AI-link knowledge docs</button><div>${m.links.map(l=>`<div>📄 <b>${E(l.title)}</b> <span class=mu>${E(l.reason)}</span></div>`).join('')}</div></div>`}
-async function setSt(id,s){await api('/meetings/'+id,'PUT',{status:s})}
-async function rc(id,b){busy(b,'AI is reading…');const r=await api('/meetings/'+id+'/recap','POST',{raw:$('#raw').value});free(b);if(r){if(!r.ai_used)toast('AI unavailable – used rule-based fallback');detail(id)}}
-async function up(i,b,id){await api('/items/'+i,'PATCH',b);detail(id)}
-async function st(i,s,id){const b={status:s};if(['done','dropped'].includes(s)){const o=prompt('Outcome of this item (required to close):');if(!o){detail(id);return}b.outcome=o}await up(i,b,id)}
-async function ai_(id){const r=await api('/meetings/'+id+'/items','POST',{title:$('#ni').value,owner:$('#no').value,due:$('#nd').value});if(r)detail(id)}
-async function cf(id){const r=await api('/meetings/'+id+'/carry','POST',{});if(r){toast('Carried '+r.items.length+' items');show('detail',r.id)}}
-async function lk(id,b){busy(b,'Linking…');await api('/meetings/'+id+'/link','POST');free(b);detail(id)}
-async function allItems(){const is=await api('/items')||[];$('#m').innerHTML=`<div class=card><table><tr><th>Item<th>Owner<th>Due<th>Status<th>Outcome</tr>${is.map(i=>`<tr><td>${E(i.title)}<td>${E(i.owner)}<td class="${i.overdue?'od':''}">${i.due||'-'}<td>${i.status}<td>${E(i.outcome)}`).join('')}</table></div>`}
-function catchup(){$('#m').innerHTML=`<div class=card><b>Who needs a catch-up brief?</b><input id=who placeholder="Name (e.g. Ravi)"><button class=b onclick="cu(this)">✨ Generate brief</button></div><div id=out></div>`}
-async function cu(b){busy(b);const r=await api('/catchup?person='+encodeURIComponent($('#who').value));free(b);if(!r)return;$('#out').innerHTML=`<div class=card>${r.ai_used?'<span class=ai>AI</span>':'<span class=mu>fallback</span>'}<p style="white-space:pre-wrap">${E(r.brief)}</p><b>Your open items</b><ul>${r.your_open_items.map(x=>`<li>${E(x)}`).join('')||'<li>None'}</ul><b class=od>Watch out</b><ul>${r.watch_out.map(x=>`<li>${E(x)}`).join('')||'<li>Nothing overdue'}</ul></div>`}
-async function kb(){const ds=await api('/docs')||[];$('#m').innerHTML=`<div class=card><b>Add document</b><input id=dt placeholder="Title"><textarea id=dc rows=4 placeholder="Content"></textarea><button class=b onclick="ad()">Save</button></div>`+ds.map(d=>`<div class=card><b>${E(d.title)}</b><p class=mu>${E(d.content)}</p></div>`).join('')}
-async function ad(){if(await api('/docs','POST',{title:$('#dt').value,content:$('#dc').value}))kb()}
-async function nudges(){$('#m').innerHTML='<div class=card>Drafting follow-ups…</div>';const r=await api('/nudges');if(!r)return;$('#m').innerHTML=`<div class=card><b>Follow-up Autopilot</b><p class=mu>Finds overdue / due-in-2-days items and drafts a ready-to-send nudge per owner. ${r.ai_used?'<span class=ai>AI</span>':''}</p></div>`+(r.messages.map(x=>`<div class=card><b>To ${E(x.owner)}</b><p>${E(x.message)}</p><button class="b g" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent);toast('Copied')">Copy</button></div>`).join('')||'<div class=card>🎉 Nothing overdue.</div>')}
-show('meetings')
-</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DigiPlus — AI Knowledge & Tasks Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-subtle: #f1f5f9;
+      --card-border: #e2e8f0;
+      --tx: #0f172a;
+      --tx-muted: #64748b;
+      --tx-light: #94a3b8;
+      
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --primary-light: #eef2ff;
+      --primary-border: #c7d2fe;
+      
+      --accent: #8b5cf6;
+      --accent-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      
+      --emerald: #10b981;
+      --emerald-bg: #ecfdf5;
+      --emerald-tx: #047857;
+      
+      --amber: #f59e0b;
+      --amber-bg: #fffbeb;
+      --amber-tx: #b45309;
+      
+      --rose: #ef4444;
+      --rose-bg: #fef2f2;
+      --rose-tx: #b91c1c;
+      
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.04);
+      --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.06);
+      
+      --radius-sm: 6px;
+      --radius: 10px;
+      --radius-lg: 14px;
+      --radius-full: 9999px;
+    }
+
+    [data-theme="dark"] {
+      --bg: #0b0f19;
+      --surface: #131b2e;
+      --surface-subtle: #1e293b;
+      --card-border: #26334d;
+      --tx: #f8fafc;
+      --tx-muted: #94a3b8;
+      --tx-light: #64748b;
+      
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --primary-light: #1e1b4b;
+      --primary-border: #3730a3;
+      
+      --emerald-bg: #064e3b33;
+      --emerald-tx: #34d399;
+      --amber-bg: #78350f33;
+      --amber-tx: #fbbf24;
+      --rose-bg: #7f1d1d33;
+      --rose-tx: #f87171;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--tx);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+    }
+    .header-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+    .logo-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius);
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 800;
+      font-size: 19px;
+      box-shadow: 0 4px 10px rgba(79, 70, 229, 0.35);
+    }
+    .brand-text h1 {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    .brand-text span {
+      font-size: 11px;
+      color: var(--tx-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--surface-subtle);
+      padding: 4px;
+      border-radius: var(--radius);
+      overflow-x: auto;
+    }
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 13px;
+      border: 0;
+      background: transparent;
+      color: var(--tx-muted);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .nav-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .nav-btn:hover { color: var(--tx); background: rgba(0,0,0,0.04); }
+    [data-theme="dark"] .nav-btn:hover { background: rgba(255,255,255,0.06); }
+    .nav-btn.active {
+      background: var(--surface);
+      color: var(--primary);
+      box-shadow: var(--shadow-sm);
+    }
+    .nav-btn.special {
+      color: #9333ea;
+    }
+    .nav-btn.special.active {
+      color: #7c3aed;
+      background: var(--surface);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--emerald-bg);
+      color: var(--emerald-tx);
+      border-radius: var(--radius-full);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status-pulse {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+    .theme-toggle {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-subtle);
+      border: 1px solid var(--card-border);
+      color: var(--tx-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    .theme-toggle:hover { color: var(--tx); border-color: var(--tx-muted); }
+
+    /* Layout & Main Container */
+    main {
+      flex: 1;
+      max-width: 1280px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* Cards & Containers */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .card:hover {
+      box-shadow: var(--shadow);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      gap: 12px;
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* KPI Metrics Dashboard Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: var(--shadow-sm);
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: var(--primary);
+    }
+    .kpi-card.overdue::before { background: var(--rose); }
+    .kpi-card.success::before { background: var(--emerald); }
+    .kpi-card.purple::before { background: var(--accent); }
+    
+    .kpi-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--tx-muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .kpi-value {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    .kpi-sub {
+      font-size: 12px;
+      color: var(--tx-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 1px 2px rgba(79, 70, 229, 0.25);
+    }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary {
+      background: var(--surface);
+      border-color: var(--card-border);
+      color: var(--tx);
+    }
+    .btn-secondary:hover { background: var(--surface-subtle); border-color: var(--tx-muted); }
+    .btn-outline {
+      background: transparent;
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .btn-outline:hover { background: var(--primary-light); }
+    .btn-ai {
+      background: var(--accent-gradient);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+    }
+    .btn-ai:hover { opacity: 0.93; transform: translateY(-1px); }
+    .btn-danger {
+      background: var(--rose-bg);
+      color: var(--rose-tx);
+      border-color: transparent;
+    }
+    .btn-danger:hover { background: #fee2e2; }
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: var(--radius-sm);
+    }
+    .btn-icon {
+      padding: 7px;
+      border-radius: var(--radius-sm);
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    /* Forms & Inputs */
+    .form-group {
+      margin-bottom: 14px;
+    }
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tx-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--tx);
+      font-family: inherit;
+      font-size: 14px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+    textarea {
+      resize: vertical;
+      min-height: 90px;
+    }
+    .form-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .form-row > * { flex: 1; }
+
+    /* Tables */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+    th {
+      background: var(--surface-subtle);
+      color: var(--tx-muted);
+      font-weight: 600;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--card-border);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--card-border);
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(0,0,0,0.015); }
+    [data-theme="dark"] tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* Badges & Chips */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: var(--radius-full);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+    .badge-primary { background: var(--primary-light); color: var(--primary); }
+    .badge-success { background: var(--emerald-bg); color: var(--emerald-tx); }
+    .badge-warning { background: var(--amber-bg); color: var(--amber-tx); }
+    .badge-danger { background: var(--rose-bg); color: var(--rose-tx); }
+    .badge-neutral { background: var(--surface-subtle); color: var(--tx-muted); border: 1px solid var(--card-border); }
+    .badge-ai {
+      background: linear-gradient(135deg, #e0e7ff 0%, #ede9fe 100%);
+      color: #6366f1;
+      font-weight: 700;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+    [data-theme="dark"] .badge-ai {
+      background: linear-gradient(135deg, #312e81 0%, #3b0764 100%);
+      color: #a5b4fc;
+    }
+
+    /* Avatars */
+    .avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+    .owner-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px 2px 2px;
+      background: var(--surface-subtle);
+      border-radius: var(--radius-full);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    /* Grid layout for Dashboard */
+    .dashboard-layout {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 20px;
+    }
+    @media (max-width: 960px) {
+      .dashboard-layout { grid-template-columns: 1fr; }
+      .header-inner { flex-wrap: wrap; height: auto; padding: 12px 16px; }
+      .nav-tabs { order: 3; width: 100%; margin-top: 8px; }
+    }
+
+    /* Meeting Card List Item */
+    .meeting-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-radius: var(--radius);
+      border: 1px solid var(--card-border);
+      background: var(--surface);
+      margin-bottom: 10px;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+    .meeting-item:hover {
+      border-color: var(--primary);
+      transform: translateX(2px);
+      box-shadow: var(--shadow-sm);
+    }
+    .meeting-main {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .meeting-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tx);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .meeting-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--tx-muted);
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1e293b;
+      color: #fff;
+      padding: 12px 18px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-xl);
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* Modal Backdrop & Window */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 16px;
+      animation: fadeIn 0.15s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 520px;
+      box-shadow: var(--shadow-xl);
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .modal-body {
+      padding: 20px;
+    }
+    .modal-footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--card-border);
+      background: var(--surface-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    /* Detail View Styles */
+    .detail-header {
+      background: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(124, 58, 237, 0.04) 100%);
+      border: 1px solid var(--primary-border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--tx-muted);
+      margin-bottom: 10px;
+    }
+    .breadcrumb a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .breadcrumb a:hover { text-decoration: underline; }
+
+    .ai-banner {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .ai-icon-circle {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--accent-gradient);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 4px 10px rgba(124, 58, 237, 0.3);
+    }
+
+    /* Search & Filter Bar */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .search-box {
+      flex: 1;
+      min-width: 220px;
+      position: relative;
+    }
+    .search-box svg {
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--tx-muted);
+      width: 16px;
+      height: 16px;
+    }
+    .search-box input {
+      padding-left: 36px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="header-inner">
+      <a href="#" class="brand" onclick="show('dashboard'); return false;">
+        <div class="logo-badge">D+</div>
+        <div class="brand-text">
+          <h1>DigiPlus</h1>
+          <span>Knowledge & Tasks Platform</span>
+        </div>
+      </a>
+
+      <nav class="nav-tabs">
+        <button class="nav-btn active" data-v="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </button>
+        <button class="nav-btn" data-v="meetings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Meetings
+        </button>
+        <button class="nav-btn" data-v="items">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Action Items
+        </button>
+        <button class="nav-btn special" data-v="nudges">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Autopilot ⭐
+        </button>
+        <button class="nav-btn" data-v="catchup">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Catch-Up
+        </button>
+        <button class="nav-btn" data-v="kb">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Knowledge Base
+        </button>
+      </nav>
+
+      <div class="header-actions">
+        <div class="status-pill">
+          <div class="status-pulse"></div>
+          <span>AI Engine Ready</span>
+        </div>
+        <button class="theme-toggle" id="themeBtn" title="Toggle Light/Dark Theme">
+          <svg id="themeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main View Container -->
+  <main id="m"></main>
+
+  <!-- Global Toast -->
+  <div id="toast"></div>
+
+  <!-- Global Modal Container -->
+  <div id="modalContainer"></div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const E = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    // Theme Switcher
+    const savedTheme = localStorage.getItem('digiplus_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon();
+
+    $('#themeBtn').onclick = () => {
+      const current = document.documentElement.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('digiplus_theme', next);
+      updateThemeIcon();
+    };
+
+    function updateThemeIcon() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      $('#themeIcon').innerHTML = isDark
+        ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+        : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+    }
+
+    // Toast Notification
+    function toast(text, isError = false) {
+      const t = $('#toast');
+      t.innerHTML = `<span>${isError ? '⚠️' : '✓'}</span> <span>${E(text)}</span>`;
+      t.style.display = 'flex';
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => t.style.display = 'none', 3800);
+    }
+
+    // Modal Helper
+    function openModal(title, bodyHtml, onConfirm, confirmText = 'Confirm') {
+      const c = $('#modalContainer');
+      c.innerHTML = `
+        <div class="modal-backdrop" onclick="if(event.target===this)closeModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <div class="modal-title">${E(title)}</div>
+              <button class="btn btn-secondary btn-sm btn-icon" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body">${bodyHtml}</div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+              <button class="btn btn-primary" id="modalConfirmBtn">${E(confirmText)}</button>
+            </div>
+          </div>
+        </div>
+      `;
+      $('#modalConfirmBtn').onclick = () => {
+        if (onConfirm() !== false) closeModal();
+      };
+    }
+    function closeModal() {
+      $('#modalContainer').innerHTML = '';
+    }
+
+    // API Wrapper
+    async function api(path, method = 'GET', body = undefined) {
+      try {
+        const res = await fetch('/api' + path, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: body ? JSON.stringify(body) : undefined
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast(data.error || 'Server error', true);
+          return null;
+        }
+        return data;
+      } catch (err) {
+        toast('Network connection failed', true);
+        return null;
+      }
+    }
+
+    const busy = (btn, text = 'Processing…') => {
+      btn.disabled = true;
+      btn.dataset.prevHtml = btn.innerHTML;
+      btn.innerHTML = `<span class="status-pulse" style="display:inline-block;margin-right:6px"></span> ${text}`;
+    };
+    const free = (btn) => {
+      btn.disabled = false;
+      btn.innerHTML = btn.dataset.prevHtml;
+    };
+
+    // Navigation Switcher
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.onclick = () => show(btn.dataset.v);
+    });
+
+    function show(view, id = null) {
+      document.querySelectorAll('.nav-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.v === view);
+      });
+      const routes = {
+        dashboard: dashboardView,
+        meetings: meetingsView,
+        items: itemsView,
+        nudges: nudgesView,
+        catchup: catchupView,
+        kb: kbView,
+        detail: () => detailView(id)
+      };
+      if (routes[view]) routes[view]();
+    }
+
+    // Initial Helper to get participant initials
+    function initials(name) {
+      return (name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    }
+
+    // Status Badge Helpers
+    function statusBadge(status) {
+      const map = {
+        planned: 'badge-primary',
+        held: 'badge-success',
+        closed: 'badge-neutral',
+        open: 'badge-primary',
+        in_progress: 'badge-warning',
+        done: 'badge-success',
+        dropped: 'badge-danger'
+      };
+      return `<span class="badge ${map[status] || 'badge-neutral'}">${status.replace('_', ' ')}</span>`;
+    }
+
+    /* ========================================================
+       1. DASHBOARD VIEW (Interactive Metrics + Overview)
+       ======================================================== */
+    async function dashboardView() {
+      $('#m').innerHTML = `
+        <div style="text-align:center;padding:40px;color:var(--tx-muted)">
+          <div class="status-pulse" style="display:inline-block;width:12px;height:12px;margin-bottom:12px"></div>
+          <div>Loading Dashboard…</div>
+        </div>
+      `;
+      const [meetings, items, docs] = await Promise.all([
+        api('/meetings') || [],
+        api('/items') || [],
+        api('/docs') || []
+      ]);
+
+      const totalMeetings = meetings.length;
+      const openItems = items.filter(i => ['open', 'in_progress'].includes(i.status));
+      const overdueItems = items.filter(i => i.overdue);
+      const doneItems = items.filter(i => i.status === 'done');
+      const completionRate = items.length ? Math.round((doneItems.length / items.length) * 100) : 0;
+
+      $('#m').innerHTML = `
+        <!-- KPI Metrics Grid -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-top">
+              <span>Total Meetings</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <div class="kpi-value">${totalMeetings}</div>
+            <div class="kpi-sub">
+              <span>${meetings.filter(m => m.status === 'held').length} held</span> · 
+              <span>${meetings.filter(m => m.status === 'planned').length} planned</span>
+            </div>
+          </div>
+
+          <div class="kpi-card ${overdueItems.length ? 'overdue' : ''}">
+            <div class="kpi-top">
+              <span>Overdue Items</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div class="kpi-value" style="${overdueItems.length ? 'color:var(--rose)' : ''}">${overdueItems.length}</div>
+            <div class="kpi-sub">
+              ${overdueItems.length ? '<span style="color:var(--rose);font-weight:700">Requires follow-up</span>' : 'All deliverables on track'}
+            </div>
+          </div>
+
+          <div class="kpi-card success">
+            <div class="kpi-top">
+              <span>Open Action Items</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            </div>
+            <div class="kpi-value">${openItems.length}</div>
+            <div class="kpi-sub">
+              <span>${completionRate}% completion rate</span>
+            </div>
+          </div>
+
+          <div class="kpi-card purple">
+            <div class="kpi-top">
+              <span>Knowledge Base</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            </div>
+            <div class="kpi-value">${docs.length}</div>
+            <div class="kpi-sub">Docs ready for AI cross-linking</div>
+          </div>
+        </div>
+
+        <!-- Dashboard Layout Split -->
+        <div class="dashboard-layout">
+          <!-- Recent Meetings Column -->
+          <div>
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  Recent Meetings & Transfers
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="modalNewMeeting()">+ New Meeting</button>
+              </div>
+
+              ${meetings.length === 0 ? '<p style="color:var(--tx-muted);padding:20px;text-align:center">No meetings recorded yet.</p>' : ''}
+              ${meetings.slice(0, 5).map(m => `
+                <div class="meeting-item" onclick="show('detail', ${m.id})">
+                  <div class="meeting-main">
+                    <div class="meeting-title">
+                      ${E(m.title)}
+                      <span class="badge badge-neutral">${m.kind}</span>
+                      ${statusBadge(m.status)}
+                    </div>
+                    <div class="meeting-meta">
+                      <span>📅 ${m.meeting_date || 'No date'}</span>
+                      <span>👥 ${E(m.participants ? (Array.isArray(m.participants) ? m.participants.join(', ') : m.participants) : 'None')}</span>
+                      <span>📌 ${m.open_items} open tasks</span>
+                    </div>
+                  </div>
+                  <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();show('detail', ${m.id})">View →</button>
+                </div>
+              `).join('')}
+
+              <div style="text-align:center;margin-top:14px">
+                <button class="btn btn-outline btn-sm" onclick="show('meetings')">View All Meetings →</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Actions & Urgent Alerts Column -->
+          <div>
+            <!-- AI Quick Actions -->
+            <div class="card" style="background:linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(124, 58, 237, 0.05) 100%);border-color:var(--primary-border)">
+              <div class="card-title" style="margin-bottom:12px;color:var(--primary)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                AI Productivity Shortcuts
+              </div>
+              <p style="font-size:12px;color:var(--tx-muted);margin-bottom:14px">
+                Trigger intelligence workflows across all team data with one click:
+              </p>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <button class="btn btn-ai" onclick="show('nudges')">
+                  ⚡ Open Follow-up Autopilot
+                </button>
+                <button class="btn btn-secondary" onclick="show('catchup')">
+                  🎯 Generate Catch-Up Brief
+                </button>
+                <button class="btn btn-secondary" onclick="modalNewMeeting()">
+                  ➕ Log New Meeting / Handover
+                </button>
+              </div>
+            </div>
+
+            <!-- Overdue Watchlist -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title" style="color:var(--rose)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  Urgent Watchlist
+                </div>
+                <span class="badge badge-danger">${overdueItems.length}</span>
+              </div>
+              ${overdueItems.length === 0 ? '<p style="color:var(--tx-muted);font-size:13px;padding:12px 0">🎉 Excellent! No overdue action items.</p>' : ''}
+              <div style="display:flex;flex-direction:column;gap:10px">
+                ${overdueItems.slice(0, 4).map(i => `
+                  <div style="padding:10px;background:var(--rose-bg);border:1px solid rgba(239, 68, 68, 0.2);border-radius:var(--radius-sm)">
+                    <div style="font-weight:600;font-size:13px;color:var(--rose-tx);margin-bottom:4px">${E(i.title)}</div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--tx-muted)">
+                      <span class="owner-pill"><span class="avatar">${initials(i.owner)}</span> ${E(i.owner)}</span>
+                      <span style="color:var(--rose);font-weight:700">Due ${i.due}</span>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+              ${overdueItems.length > 4 ? `
+                <button class="btn btn-secondary btn-sm" style="width:100%;margin-top:10px" onclick="show('items')">
+                  View all ${overdueItems.length} overdue →
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    /* ========================================================
+       2. MEETINGS VIEW
+       ======================================================== */
+    async function meetingsView() {
+      const ms = await api('/meetings') || [];
+      $('#m').innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Meetings & Work Transfers</div>
+              <div style="font-size:12px;color:var(--tx-muted)">Track meeting agendas, AI summaries, and handovers</div>
+            </div>
+            <button class="btn btn-primary" onclick="modalNewMeeting()">+ New Meeting</button>
+          </div>
+
+          <div class="filter-bar">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="meetingSearch" placeholder="Search meetings by title or participant…" oninput="filterMeetings()">
+            </div>
+            <select id="meetingKindFilter" style="width:auto" onchange="filterMeetings()">
+              <option value="">All Types</option>
+              <option value="meeting">Meeting</option>
+              <option value="handover">Handover</option>
+            </select>
+            <select id="meetingStatusFilter" style="width:auto" onchange="filterMeetings()">
+              <option value="">All Statuses</option>
+              <option value="planned">Planned</option>
+              <option value="held">Held</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+
+          <div id="meetingsList">
+            ${renderMeetingsList(ms)}
+          </div>
+        </div>
+      `;
+      window._allMeetings = ms;
+    }
+
+    function renderMeetingsList(list) {
+      if (!list.length) return '<p style="text-align:center;padding:30px;color:var(--tx-muted)">No matching meetings found.</p>';
+      return list.map(m => `
+        <div class="meeting-item" onclick="show('detail', ${m.id})">
+          <div class="meeting-main">
+            <div class="meeting-title">
+              ${E(m.title)}
+              <span class="badge badge-neutral">${m.kind}</span>
+              ${statusBadge(m.status)}
+            </div>
+            <div class="meeting-meta">
+              <span>📅 ${m.meeting_date || 'Unscheduled'}</span>
+              <span>👥 ${E(m.participants ? (Array.isArray(m.participants) ? m.participants.join(', ') : m.participants) : 'None')}</span>
+              <span>📌 ${m.open_items} open items</span>
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();show('detail', ${m.id})">Open Details →</button>
+        </div>
+      `).join('');
+    }
+
+    function filterMeetings() {
+      const q = ($('#meetingSearch').value || '').toLowerCase();
+      const kind = $('#meetingKindFilter').value;
+      const status = $('#meetingStatusFilter').value;
+      const filtered = (window._allMeetings || []).filter(m => {
+        const matchQ = (m.title || '').toLowerCase().includes(q) || (m.participants || '').toLowerCase().includes(q);
+        const matchKind = !kind || m.kind === kind;
+        const matchStatus = !status || m.status === status;
+        return matchQ && matchKind && matchStatus;
+      });
+      $('#meetingsList').innerHTML = renderMeetingsList(filtered);
+    }
+
+    function modalNewMeeting() {
+      const html = `
+        <div class="form-group">
+          <label class="form-label">Meeting Title *</label>
+          <input id="new_t" placeholder="e.g. Q4 Sprint Planning or Handover Sync" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Type</label>
+            <select id="new_k">
+              <option value="meeting">Meeting</option>
+              <option value="handover">Work Transfer (Handover)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date</label>
+            <input id="new_d" type="date" value="${new Date().toISOString().split('T')[0]}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Participants (comma-separated)</label>
+          <input id="new_p" placeholder="e.g. Asha, Ravi, Meera">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Agenda / Objectives</label>
+          <textarea id="new_a" placeholder="Outline the main discussion topics or transfer scope"></textarea>
+        </div>
+      `;
+      openModal('Create New Meeting / Transfer', html, async () => {
+        const title = $('#new_t').value.trim();
+        if (!title) {
+          toast('Title is required', true);
+          return false;
+        }
+        const res = await api('/meetings', 'POST', {
+          title,
+          kind: $('#new_k').value,
+          participants: $('#new_p').value,
+          meeting_date: $('#new_d').value,
+          agenda: $('#new_a').value
+        });
+        if (res) {
+          toast('Meeting created successfully');
+          show('detail', res.id);
+        }
+      }, 'Create Meeting');
+    }
+
+    /* ========================================================
+       3. MEETING DETAIL VIEW
+       ======================================================== */
+    async function detailView(id) {
+      const m = await api('/meetings/' + id);
+      if (!m) return show('meetings');
+
+      $('#m').innerHTML = `
+        <!-- Breadcrumb & Top Bar -->
+        <div class="breadcrumb">
+          <a href="#" onclick="show('meetings'); return false;">Meetings</a>
+          <span>/</span>
+          <span>#${m.id} ${E(m.title)}</span>
+        </div>
+
+        <div class="detail-header">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+            <div>
+              <h2 style="font-size:22px;font-weight:800;letter-spacing:-0.02em;margin-bottom:6px">
+                ${E(m.title)}
+              </h2>
+              <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--tx-muted);flex-wrap:wrap">
+                <span class="badge badge-neutral">${m.kind}</span>
+                <span>📅 ${m.meeting_date || 'No date'}</span>
+                <span>👥 ${E(m.participants.join(', ')) || 'No attendees'}</span>
+                ${m.prev_id ? `<span>· Preceded by <a href="#" onclick="show('detail', ${m.prev_id}); return false" style="color:var(--primary);font-weight:600">#${m.prev_id}</a></span>` : ''}
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px">
+              <label style="font-size:12px;font-weight:600;color:var(--tx-muted)">Status:</label>
+              <select id="meetingStatusSel" style="width:auto;font-weight:600" onchange="updateMeetingStatus(${id}, this.value)">
+                ${['planned', 'held', 'closed'].map(s => `<option value="${s}" ${s === m.status ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+
+          ${m.agenda ? `
+            <div style="margin-top:12px;padding:12px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--card-border);font-size:13px;white-space:pre-wrap"><b>Agenda:</b>\n${E(m.agenda)}</div>
+          ` : ''}
+        </div>
+
+        <!-- Quick AI & Action Toolbar -->
+        <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+          <button class="btn btn-ai" onclick="generateRecap(${id}, this)">
+            ✨ Generate AI Recap from Notes
+          </button>
+          <button class="btn btn-secondary" onclick="carryItems(${id}, this)">
+            ⏭ Carry Open Items to Next Meeting
+          </button>
+          <button class="btn btn-outline" onclick="linkDocs(${id}, this)">
+            🔗 AI-Link Knowledge Docs
+          </button>
+        </div>
+
+        <!-- Raw Notes / Input Card -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              Meeting Notes / Transcript / Email / Raw Chat
+            </div>
+            <button class="btn btn-sm btn-secondary" onclick="saveRawNotes(${id})">Save Notes</button>
+          </div>
+          <textarea id="rawNotesText" rows="6" placeholder="Paste raw conversation notes, transcripts, or email threads here. AI will extract summary, key decisions, and action items with owners and due dates.">${E(m.notes || '')}</textarea>
+        </div>
+
+        <!-- AI Structured Summary & Decisions -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              Executive Summary & Decisions
+            </div>
+            ${m.summary ? '<span class="badge badge-ai">AI Structured</span>' : ''}
+          </div>
+
+          <div style="margin-bottom:16px">
+            <label class="form-label">Summary</label>
+            <div style="font-size:14px;line-height:1.6;color:var(--tx);padding:12px;background:var(--surface-subtle);border-radius:var(--radius-sm)">
+              ${m.summary ? E(m.summary) : '<span style="color:var(--tx-muted);font-style:italic">No summary generated yet. Click "Generate AI Recap" above to structure raw notes.</span>'}
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label">Decisions Log</label>
+            ${(!m.decisions || !m.decisions.length) ? '<div style="color:var(--tx-muted);font-size:13px;font-style:italic">No decisions recorded yet.</div>' : `
+              <ul style="padding-left:20px;font-size:13px;display:flex;flex-direction:column;gap:6px">
+                ${m.decisions.map(d => `<li style="font-weight:500">${E(d)}</li>`).join('')}
+              </ul>
+            `}
+          </div>
+        </div>
+
+        <!-- Action Items Table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              Action Items (${m.items.length})
+            </div>
+          </div>
+
+          <div class="table-container" style="margin-bottom:16px">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:34%">Task</th>
+                  <th style="width:18%">Owner</th>
+                  <th style="width:16%">Due Date</th>
+                  <th style="width:14%">Status</th>
+                  <th style="width:18%">Outcome</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${!m.items.length ? '<tr><td colspan="5" style="text-align:center;color:var(--tx-muted);padding:24px">No action items yet. Add one below.</td></tr>' : ''}
+                ${m.items.map(item => `
+                  <tr>
+                    <td>
+                      <div style="font-weight:600">${E(item.title)}</div>
+                      <div style="font-size:11px;color:var(--tx-muted);cursor:pointer;margin-top:2px" onclick="showItemHistory(${JSON.stringify(item.history).replace(/"/g, '&quot;')})">
+                        🕒 History (${item.history ? item.history.length : 0} events)
+                      </div>
+                    </td>
+                    <td>
+                      <input value="${E(item.owner)}" style="font-size:12px;padding:5px 8px" onchange="updateItemField(${item.id}, 'owner', this.value, ${id})">
+                    </td>
+                    <td>
+                      <input type="date" value="${item.due || ''}" class="${item.overdue ? 'overdue-input' : ''}" style="font-size:12px;padding:5px 8px;${item.overdue ? 'color:var(--rose);font-weight:700' : ''}" onchange="updateItemField(${item.id}, 'due', this.value, ${id})">
+                    </td>
+                    <td>
+                      <select style="font-size:12px;padding:5px 8px" onchange="changeItemStatus(${item.id}, this.value, ${id})">
+                        ${['open', 'in_progress', 'done', 'dropped'].map(s => `
+                          <option value="${s}" ${s === item.status ? 'selected' : ''}>${s.replace('_', ' ')}</option>
+                        `).join('')}
+                      </select>
+                    </td>
+                    <td style="font-size:12px;color:var(--tx-muted)">
+                      ${item.outcome ? `<span style="color:var(--emerald-tx);font-weight:500">✓ ${E(item.outcome)}</span>` : '<span style="color:var(--tx-light)">—</span>'}
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Add Item Row -->
+          <div style="background:var(--surface-subtle);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--card-border)">
+            <div style="font-size:12px;font-weight:700;margin-bottom:8px">➕ Add New Action Item</div>
+            <div class="form-row" style="margin-bottom:0">
+              <input id="new_item_title" placeholder="Action item description *" style="flex:2">
+              <input id="new_item_owner" placeholder="Owner (e.g. Meera)" style="flex:1">
+              <input id="new_item_due" type="date" style="flex:1" value="${new Date().toISOString().split('T')[0]}">
+              <button class="btn btn-primary btn-sm" onclick="addNewItem(${id})">Add Item</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Linked Documents Card -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              Linked Knowledge-Base Articles (${m.links ? m.links.length : 0})
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="linkDocs(${id}, this)">Re-Link AI Docs</button>
+          </div>
+          ${(!m.links || !m.links.length) ? '<p style="color:var(--tx-muted);font-size:13px">No knowledge articles linked yet. Click "AI-Link Knowledge Docs" to automatically discover relevant organizational procedures.</p>' : ''}
+          <div style="display:flex;flex-direction:column;gap:8px">
+            ${(m.links || []).map(l => `
+              <div style="padding:10px 14px;background:var(--surface-subtle);border-radius:var(--radius-sm);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:space-between">
+                <div>
+                  <div style="font-weight:700;font-size:13px">📄 ${E(l.title)}</div>
+                  <div style="font-size:11px;color:var(--tx-muted);margin-top:2px">${E(l.reason)}</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="show('kb')">View Doc →</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    async function updateMeetingStatus(id, status) {
+      const res = await api('/meetings/' + id, 'PUT', { status });
+      if (res) toast('Status updated to ' + status);
+    }
+    async function saveRawNotes(id) {
+      const notes = $('#rawNotesText').value;
+      const res = await api('/meetings/' + id, 'PUT', { notes });
+      if (res) toast('Notes saved');
+    }
+    async function generateRecap(id, btn) {
+      busy(btn, 'AI Analyzing Notes…');
+      const res = await api('/meetings/' + id + '/recap', 'POST', { raw: $('#rawNotesText').value });
+      free(btn);
+      if (res) {
+        toast(res.ai_used ? 'AI Recap generated successfully!' : 'Used rule-based fallback (AI unavailable)');
+        detailView(id);
+      }
+    }
+    async function carryItems(id, btn) {
+      busy(btn, 'Carrying Items…');
+      const res = await api('/meetings/' + id + '/carry', 'POST', {});
+      free(btn);
+      if (res) {
+        toast(`Carried ${res.items.length} open items to meeting #${res.id}`);
+        show('detail', res.id);
+      }
+    }
+    async function linkDocs(id, btn) {
+      busy(btn, 'Discovering Docs…');
+      const res = await api('/meetings/' + id + '/link', 'POST');
+      free(btn);
+      if (res) {
+        toast(`Linked ${res.links.length} knowledge documents`);
+        detailView(id);
+      }
+    }
+    async function updateItemField(itemId, field, val, meetingId) {
+      const body = {};
+      body[field] = val;
+      const res = await api('/items/' + itemId, 'PATCH', body);
+      if (res) toast('Item updated');
+    }
+    async function changeItemStatus(itemId, newStatus, meetingId) {
+      if (['done', 'dropped'].includes(newStatus)) {
+        openModal(
+          `Record Outcome (${newStatus.toUpperCase()})`,
+          `
+            <div class="form-group">
+              <label class="form-label">Outcome summary (Required to close item)</label>
+              <textarea id="modalOutcomeText" placeholder="e.g. Legal approved the contract with updated indemnity clause."></textarea>
+            </div>
+          `,
+          async () => {
+            const outcome = $('#modalOutcomeText').value.trim();
+            if (!outcome) {
+              toast('Outcome description is mandatory to close an item', true);
+              return false;
+            }
+            await api('/items/' + itemId, 'PATCH', { status: newStatus, outcome });
+            toast('Item marked as ' + newStatus);
+            detailView(meetingId);
+          },
+          'Save & Close Item'
+        );
+      } else {
+        await api('/items/' + itemId, 'PATCH', { status: newStatus });
+        toast('Status set to ' + newStatus);
+        detailView(meetingId);
+      }
+    }
+    async function addNewItem(meetingId) {
+      const title = $('#new_item_title').value.trim();
+      if (!title) return toast('Task title is required', true);
+      const owner = $('#new_item_owner').value.trim();
+      const due = $('#new_item_due').value;
+      const res = await api('/meetings/' + meetingId + '/items', 'POST', { title, owner, due });
+      if (res) {
+        toast('Action item added');
+        detailView(meetingId);
+      }
+    }
+    function showItemHistory(history) {
+      const list = history && history.length ? history.map(h => `
+        <div style="padding:8px 0;border-bottom:1px solid var(--card-border);font-size:12px">
+          <span style="color:var(--tx-muted);margin-right:8px">${E(h.ts)}</span>
+          <span style="font-weight:600">${E(h.event)}</span>
+        </div>
+      `).join('') : '<p style="color:var(--tx-muted)">No history entries recorded.</p>';
+      openModal('Audit History', list, () => true, 'Close');
+    }
+
+    /* ========================================================
+       4. ALL ACTION ITEMS VIEW
+       ======================================================== */
+    async function itemsView() {
+      const items = await api('/items') || [];
+      $('#m').innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">All Action Items (${items.length})</div>
+              <div style="font-size:12px;color:var(--tx-muted)">Cross-meeting deliverable tracker</div>
+            </div>
+          </div>
+
+          <div class="filter-bar">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="itemSearch" placeholder="Search tasks by title, owner, or outcome…" oninput="filterItems()">
+            </div>
+            <select id="itemStatusFilter" style="width:auto" onchange="filterItems()">
+              <option value="">All Statuses</option>
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="overdue">Overdue Only ⚠️</option>
+              <option value="done">Done</option>
+              <option value="dropped">Dropped</option>
+            </select>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:36%">Task</th>
+                  <th style="width:16%">Owner</th>
+                  <th style="width:16%">Due Date</th>
+                  <th style="width:14%">Status</th>
+                  <th style="width:18%">Outcome</th>
+                </tr>
+              </thead>
+              <tbody id="itemsTableBody">
+                ${renderItemsRows(items)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+      window._allItems = items;
+    }
+
+    function renderItemsRows(list) {
+      if (!list.length) return '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--tx-muted)">No action items found.</td></tr>';
+      return list.map(item => `
+        <tr>
+          <td>
+            <div style="font-weight:600">${E(item.title)}</div>
+            <div style="font-size:11px;color:var(--tx-muted)">From meeting <a href="#" onclick="show('detail', ${item.meeting_id}); return false" style="color:var(--primary)">#${item.meeting_id}</a></div>
+          </td>
+          <td>
+            <span class="owner-pill"><span class="avatar">${initials(item.owner)}</span> ${E(item.owner)}</span>
+          </td>
+          <td>
+            <span class="${item.overdue ? 'badge badge-danger' : 'badge badge-neutral'}">
+              ${item.due || 'No date'}
+            </span>
+          </td>
+          <td>${statusBadge(item.status)}</td>
+          <td style="font-size:12px;color:var(--tx-muted)">
+            ${item.outcome ? `<span style="color:var(--emerald-tx);font-weight:500">✓ ${E(item.outcome)}</span>` : '—'}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function filterItems() {
+      const q = ($('#itemSearch').value || '').toLowerCase();
+      const status = $('#itemStatusFilter').value;
+      const filtered = (window._allItems || []).filter(i => {
+        const matchQ = (i.title || '').toLowerCase().includes(q) || (i.owner || '').toLowerCase().includes(q) || (i.outcome || '').toLowerCase().includes(q);
+        let matchStatus = true;
+        if (status === 'overdue') matchStatus = i.overdue;
+        else if (status) matchStatus = i.status === status;
+        return matchQ && matchStatus;
+      });
+      $('#itemsTableBody').innerHTML = renderItemsRows(filtered);
+    }
+
+    /* ========================================================
+       5. FOLLOW-UP AUTOPILOT ⭐
+       ======================================================== */
+    async function nudgesView() {
+      $('#m').innerHTML = `
+        <div class="card" style="text-align:center;padding:40px;color:var(--tx-muted)">
+          <div class="status-pulse" style="display:inline-block;width:12px;height:12px;margin-bottom:12px"></div>
+          <div>Scanning overdue items & drafting personalized nudges…</div>
+        </div>
+      `;
+      const res = await api('/nudges');
+      if (!res) return;
+
+      $('#m').innerHTML = `
+        <div class="ai-banner">
+          <div class="ai-icon-circle">⚡</div>
+          <div>
+            <h2 style="font-size:18px;font-weight:800;letter-spacing:-0.01em;margin-bottom:4px">
+              Follow-up Autopilot
+              ${res.ai_used ? '<span class="badge badge-ai">Claude AI Generated</span>' : '<span class="badge badge-neutral">Rule-based Fallback</span>'}
+            </h2>
+            <p style="font-size:13px;color:var(--tx-muted)">
+              Automatically identifies all deliverables that are overdue or due within 2 days, groups them by owner, and crafts short, ready-to-copy follow-up messages.
+            </p>
+          </div>
+        </div>
+
+        ${(!res.messages || !res.messages.length) ? `
+          <div class="card" style="text-align:center;padding:40px">
+            <div style="font-size:32px;margin-bottom:10px">🎉</div>
+            <div style="font-size:16px;font-weight:700">No Pending Follow-ups</div>
+            <p style="color:var(--tx-muted);font-size:13px;margin-top:4px">All team action items are on track or already completed.</p>
+          </div>
+        ` : `
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:16px">
+            ${res.messages.map(m => `
+              <div class="card" style="display:flex;flex-direction:column;justify-content:space-between">
+                <div>
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                    <span class="avatar" style="width:32px;height:32px;font-size:13px">${initials(m.owner)}</span>
+                    <div>
+                      <div style="font-weight:700;font-size:14px">Follow-up for ${E(m.owner)}</div>
+                      <div style="font-size:11px;color:var(--tx-muted)">Ready-to-send nudge</div>
+                    </div>
+                  </div>
+                  <div style="font-size:13px;line-height:1.6;padding:12px;background:var(--surface-subtle);border-radius:var(--radius-sm);border:1px solid var(--card-border);margin-bottom:14px">
+                    ${E(m.message)}
+                  </div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="copyText(this, '${E(m.message).replace(/'/g, "\\'")}')">
+                  📋 Copy Message to Clipboard
+                </button>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      `;
+    }
+
+    function copyText(btn, text) {
+      navigator.clipboard.writeText(text);
+      const original = btn.innerHTML;
+      btn.innerHTML = '✓ Copied!';
+      btn.style.color = 'var(--emerald-tx)';
+      setTimeout(() => {
+        btn.innerHTML = original;
+        btn.style.color = '';
+      }, 2000);
+    }
+
+    /* ========================================================
+       6. CATCH-UP BRIEF VIEW
+       ======================================================== */
+    function catchupView() {
+      $('#m').innerHTML = `
+        <div class="ai-banner">
+          <div class="ai-icon-circle">🎯</div>
+          <div>
+            <h2 style="font-size:18px;font-weight:800;letter-spacing:-0.01em;margin-bottom:4px">
+              Catch-Up & Handover Briefing Assistant
+            </h2>
+            <p style="font-size:13px;color:var(--tx-muted)">
+              Generates an executive briefing for team members returning from absence or taking over responsibilities.
+            </p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="margin-bottom:12px">Enter Recipient Name</div>
+          <div class="form-row" style="margin-bottom:0">
+            <input id="catchupPerson" placeholder="e.g. Ravi, Meera, or Asha" value="Ravi">
+            <button class="btn btn-primary" onclick="generateCatchup(this)">✨ Generate Brief</button>
+          </div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx-muted)">
+            <span>Suggested:</span>
+            <button class="btn btn-secondary btn-sm" onclick="$('#catchupPerson').value='Ravi';generateCatchup()">Ravi</button>
+            <button class="btn btn-secondary btn-sm" onclick="$('#catchupPerson').value='Meera';generateCatchup()">Meera</button>
+            <button class="btn btn-secondary btn-sm" onclick="$('#catchupPerson').value='Asha';generateCatchup()">Asha</button>
+          </div>
+        </div>
+
+        <div id="catchupResult"></div>
+      `;
+    }
+
+    async function generateCatchup(btn = null) {
+      const person = ($('#catchupPerson').value || '').trim();
+      if (!person) return toast('Please enter a person name', true);
+      const out = $('#catchupResult');
+      out.innerHTML = `
+        <div class="card" style="text-align:center;padding:30px;color:var(--tx-muted)">
+          <div class="status-pulse" style="display:inline-block;width:10px;height:10px;margin-bottom:10px"></div>
+          <div>Synthesizing recent meetings and assigned items for ${E(person)}…</div>
+        </div>
+      `;
+      if (btn) busy(btn, 'Generating…');
+      const res = await api('/catchup?person=' + encodeURIComponent(person));
+      if (btn) free(btn);
+      if (!res) {
+        out.innerHTML = '';
+        return;
+      }
+
+      out.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              📋 Catch-Up Brief for ${E(person)}
+            </div>
+            ${res.ai_used ? '<span class="badge badge-ai">Claude AI Generated</span>' : '<span class="badge badge-neutral">Rule-based Fallback</span>'}
+          </div>
+
+          <div style="margin-bottom:16px">
+            <label class="form-label">Context & Recent Decisions</label>
+            <div style="font-size:14px;line-height:1.6;padding:14px;background:var(--surface-subtle);border-radius:var(--radius-sm);white-space:pre-wrap">${E(res.brief)}</div>
+          </div>
+
+          <div class="dashboard-layout" style="margin-bottom:0">
+            <div>
+              <label class="form-label">Your Active Open Items</label>
+              <div style="padding:12px;background:var(--surface-subtle);border-radius:var(--radius-sm)">
+                ${(!res.your_open_items || !res.your_open_items.length) ? '<span style="color:var(--tx-muted);font-size:13px">No open items assigned.</span>' : `
+                  <ul style="padding-left:18px;font-size:13px;display:flex;flex-direction:column;gap:6px">
+                    ${res.your_open_items.map(x => `<li>${E(x)}</li>`).join('')}
+                  </ul>
+                `}
+              </div>
+            </div>
+
+            <div>
+              <label class="form-label" style="color:var(--rose)">⚠️ Watch Out (Overdue)</label>
+              <div style="padding:12px;background:var(--rose-bg);border-radius:var(--radius-sm);border:1px solid rgba(239, 68, 68, 0.2)">
+                ${(!res.watch_out || !res.watch_out.length) ? '<span style="color:var(--emerald-tx);font-weight:600;font-size:13px">✓ No overdue items!</span>' : `
+                  <ul style="padding-left:18px;font-size:13px;color:var(--rose-tx);font-weight:600;display:flex;flex-direction:column;gap:6px">
+                    ${res.watch_out.map(x => `<li>${E(x)}</li>`).join('')}
+                  </ul>
+                `}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    /* ========================================================
+       7. KNOWLEDGE BASE VIEW
+       ======================================================== */
+    async function kbView() {
+      const docs = await api('/docs') || [];
+      $('#m').innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Knowledge Base Library</div>
+              <div style="font-size:12px;color:var(--tx-muted)">Organizational documents used by AI for meeting contextualization</div>
+            </div>
+            <button class="btn btn-primary" onclick="modalNewDoc()">+ Add Article</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:16px">
+            ${docs.map(d => `
+              <div class="card" style="margin-bottom:0">
+                <div style="font-weight:700;font-size:15px;margin-bottom:8px;color:var(--primary)">
+                  📄 ${E(d.title)}
+                </div>
+                <div style="font-size:13px;line-height:1.6;color:var(--tx);white-space:pre-wrap">${E(d.content)}</div>
+                <div style="margin-top:12px;font-size:11px;color:var(--tx-muted)">
+                  ID #${d.id} · Added ${d.created_at || 'Standard library'}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function modalNewDoc() {
+      const html = `
+        <div class="form-group">
+          <label class="form-label">Document Title *</label>
+          <input id="new_doc_title" placeholder="e.g. Incident Response Protocol" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Content *</label>
+          <textarea id="new_doc_content" rows="6" placeholder="Paste guidelines, standard procedures, or policies"></textarea>
+        </div>
+      `;
+      openModal('Add Knowledge Base Document', html, async () => {
+        const title = $('#new_doc_title').value.trim();
+        const content = $('#new_doc_content').value.trim();
+        if (!title || !content) {
+          toast('Title and content are required', true);
+          return false;
+        }
+        const res = await api('/docs', 'POST', { title, content });
+        if (res) {
+          toast('Document added to Knowledge Base');
+          kbView();
+        }
+      }, 'Save Document');
+    }
+
+    // Start on Dashboard
+    show('dashboard');
+  </script>
+</body>
+</html>
