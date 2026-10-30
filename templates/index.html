@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Knowledge & Tasks Platform</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1b1f2a;--mu:#667;--ac:#4f46e5;--bd:#e3e6ef;--rd:#d93025}
+@media(prefers-color-scheme:dark){:root{--bg:#12141b;--card:#1b1e28;--tx:#e8eaf2;--mu:#99a;--bd:#2d3140}}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{background:var(--ac);color:#fff;padding:12px 20px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}header h1{font-size:17px;margin:0 16px 0 0}
+header button{background:#fff2;color:#fff;border:0;padding:7px 12px;border-radius:6px;cursor:pointer}header button.on{background:#fff;color:var(--ac)}
+main{max-width:1000px;margin:20px auto;padding:0 16px}.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:12px}
+input,textarea,select{width:100%;padding:8px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--tx);font:inherit;margin:4px 0}
+button.b{background:var(--ac);color:#fff;border:0;padding:8px 14px;border-radius:6px;cursor:pointer;margin:4px 4px 4px 0}button.g{background:none;color:var(--ac);border:1px solid var(--ac)}
+table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:top}td input,td select{margin:0}
+.od{color:var(--rd);font-weight:600}.tag{background:var(--bd);border-radius:10px;padding:2px 8px;font-size:12px}.mu{color:var(--mu);font-size:13px}.row{display:flex;gap:10px}.row>*{flex:1}
+#toast{position:fixed;bottom:16px;right:16px;background:#222;color:#fff;padding:10px 14px;border-radius:8px;display:none;max-width:320px}.ai{background:#e8e6ff;color:#4f46e5;border-radius:10px;padding:2px 8px;font-size:12px}
+</style></head><body>
+<header><h1>📚 Knowledge & Tasks</h1><button data-v="meetings">Meetings</button><button data-v="items">All Action Items</button><button data-v="catchup">Catch-up</button><button data-v="kb">Knowledge Base</button><button data-v="nudges">Follow-up Autopilot ⭐</button></header>
+<main id="m"></main><div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',4000)}
+async function api(p,m='GET',b){try{const r=await fetch('/api'+p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});const j=await r.json();if(!r.ok){toast(j.error+(j.request_id?' (ref '+j.request_id+')':''));return null}return j}catch(e){toast('Network error');return null}}
+const busy=(b,t)=>{b.disabled=true;b.dataset.o=b.textContent;b.textContent=t||'Working…'},free=b=>{b.disabled=false;b.textContent=b.dataset.o};
+document.querySelectorAll('header button').forEach(b=>b.onclick=()=>show(b.dataset.v));
+function show(v,id){document.querySelectorAll('header button').forEach(b=>b.classList.toggle('on',b.dataset.v==v));({meetings:meetings,items:allItems,catchup:catchup,kb:kb,nudges:nudges,detail:()=>detail(id)})[v]()}
+async function meetings(){const ms=await api('/meetings')||[];$('#m').innerHTML=`<div class=card><b>New meeting / work transfer</b><div class=row><input id=t placeholder="Title *"><select id=k><option>meeting<option>handover</select></div><div class=row><input id=p placeholder="Participants (comma separated)"><input id=d type=date></div><textarea id=a placeholder="Agenda"></textarea><button class=b onclick="mk()">Create</button></div>`+ms.map(m=>`<div class=card><a href="#" onclick="show('detail',${m.id});return false"><b>${E(m.title)}</b></a> <span class=tag>${m.kind}</span> <span class=tag>${m.status}</span> <span class=mu>${m.meeting_date||''} · ${m.open_items} open items</span></div>`).join('')}
+async function mk(){const r=await api('/meetings','POST',{title:$('#t').value,kind:$('#k').value,participants:$('#p').value,meeting_date:$('#d').value,agenda:$('#a').value});if(r)show('detail',r.id)}
+async function detail(id){const m=await api('/meetings/'+id);if(!m)return;const ai=x=>x?'<span class=ai>AI</span>':'';
+$('#m').innerHTML=`<div class=card><h3>${E(m.title)} <span class=tag>${m.kind}</span></h3><div class=mu>Participants: ${E(m.participants.join(', '))||'-'} ${m.prev_id?` · follows <a href="#" onclick="show('detail',${m.prev_id});return false">#${m.prev_id}</a>`:''}</div>
+<label>Status <select id=st onchange="setSt(${id},this.value)">${['planned','held','closed'].map(s=>`<option ${s==m.status?'selected':''}>${s}`).join('')}</select></label><pre style="white-space:pre-wrap">${E(m.agenda)}</pre></div>
+<div class=card><b>Raw notes / transcript / chat / email</b><textarea id=raw rows=6 placeholder="Paste unstructured info. Tip: AI structures it into summary, decisions, action items.">${E(m.notes)}</textarea><button class=b id=rb onclick="rc(${id},this)">✨ Generate AI recap</button></div>
+<div class=card><b>Summary</b><p>${E(m.summary)||'<span class=mu>No recap yet</span>'}</p><b>Decisions</b><ul>${m.decisions.map(d=>`<li>${E(d)}`).join('')||'<li class=mu>None'}</ul></div>
+<div class=card><b>Action items</b><table><tr><th>Item<th>Owner<th>Due<th>Status<th>Outcome</tr>${m.items.map(i=>`<tr><td><span title="${E(i.history.map(h=>h.ts+' '+h.event).join('\n'))}">${E(i.title)}</span><br><span class=mu>hover for history</span><td><input value="${E(i.owner)}" onchange="up(${i.id},{owner:this.value},${id})"><td><input type=date value="${i.due||''}" class="${i.overdue?'od':''}" onchange="up(${i.id},{due:this.value},${id})"><td><select onchange="st(${i.id},this.value,${id})">${['open','in_progress','done','dropped'].map(s=>`<option ${s==i.status?'selected':''}>${s}`).join('')}</select><td>${E(i.outcome)}`).join('')}</table>
+<div class=row><input id=ni placeholder="New item"><input id=no placeholder="Owner"><input id=nd type=date><button class=b onclick="ai_(${id})">Add</button></div></div>
+<div class=card><button class=b onclick="cf(${id})">⏭ Carry open items to next meeting</button><button class="b g" onclick="lk(${id},this)">🔗 AI-link knowledge docs</button><div>${m.links.map(l=>`<div>📄 <b>${E(l.title)}</b> <span class=mu>${E(l.reason)}</span></div>`).join('')}</div></div>`}
+async function setSt(id,s){await api('/meetings/'+id,'PUT',{status:s})}
+async function rc(id,b){busy(b,'AI is reading…');const r=await api('/meetings/'+id+'/recap','POST',{raw:$('#raw').value});free(b);if(r){if(!r.ai_used)toast('AI unavailable – used rule-based fallback');detail(id)}}
+async function up(i,b,id){await api('/items/'+i,'PATCH',b);detail(id)}
+async function st(i,s,id){const b={status:s};if(['done','dropped'].includes(s)){const o=prompt('Outcome of this item (required to close):');if(!o){detail(id);return}b.outcome=o}await up(i,b,id)}
+async function ai_(id){const r=await api('/meetings/'+id+'/items','POST',{title:$('#ni').value,owner:$('#no').value,due:$('#nd').value});if(r)detail(id)}
+async function cf(id){const r=await api('/meetings/'+id+'/carry','POST',{});if(r){toast('Carried '+r.items.length+' items');show('detail',r.id)}}
+async function lk(id,b){busy(b,'Linking…');await api('/meetings/'+id+'/link','POST');free(b);detail(id)}
+async function allItems(){const is=await api('/items')||[];$('#m').innerHTML=`<div class=card><table><tr><th>Item<th>Owner<th>Due<th>Status<th>Outcome</tr>${is.map(i=>`<tr><td>${E(i.title)}<td>${E(i.owner)}<td class="${i.overdue?'od':''}">${i.due||'-'}<td>${i.status}<td>${E(i.outcome)}`).join('')}</table></div>`}
+function catchup(){$('#m').innerHTML=`<div class=card><b>Who needs a catch-up brief?</b><input id=who placeholder="Name (e.g. Ravi)"><button class=b onclick="cu(this)">✨ Generate brief</button></div><div id=out></div>`}
+async function cu(b){busy(b);const r=await api('/catchup?person='+encodeURIComponent($('#who').value));free(b);if(!r)return;$('#out').innerHTML=`<div class=card>${r.ai_used?'<span class=ai>AI</span>':'<span class=mu>fallback</span>'}<p style="white-space:pre-wrap">${E(r.brief)}</p><b>Your open items</b><ul>${r.your_open_items.map(x=>`<li>${E(x)}`).join('')||'<li>None'}</ul><b class=od>Watch out</b><ul>${r.watch_out.map(x=>`<li>${E(x)}`).join('')||'<li>Nothing overdue'}</ul></div>`}
+async function kb(){const ds=await api('/docs')||[];$('#m').innerHTML=`<div class=card><b>Add document</b><input id=dt placeholder="Title"><textarea id=dc rows=4 placeholder="Content"></textarea><button class=b onclick="ad()">Save</button></div>`+ds.map(d=>`<div class=card><b>${E(d.title)}</b><p class=mu>${E(d.content)}</p></div>`).join('')}
+async function ad(){if(await api('/docs','POST',{title:$('#dt').value,content:$('#dc').value}))kb()}
+async function nudges(){$('#m').innerHTML='<div class=card>Drafting follow-ups…</div>';const r=await api('/nudges');if(!r)return;$('#m').innerHTML=`<div class=card><b>Follow-up Autopilot</b><p class=mu>Finds overdue / due-in-2-days items and drafts a ready-to-send nudge per owner. ${r.ai_used?'<span class=ai>AI</span>':''}</p></div>`+(r.messages.map(x=>`<div class=card><b>To ${E(x.owner)}</b><p>${E(x.message)}</p><button class="b g" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent);toast('Copied')">Copy</button></div>`).join('')||'<div class=card>🎉 Nothing overdue.</div>')}
+show('meetings')
+</script></body></html>
